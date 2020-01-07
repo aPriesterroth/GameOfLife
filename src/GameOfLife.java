@@ -1,78 +1,234 @@
 import javax.swing.*;
+import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseListener;
+import java.awt.event.MouseMotionListener;
 import java.util.concurrent.ThreadLocalRandom;
 
 public class GameOfLife implements Runnable {
 
-    public static final int WIDTH = 1080;
-    public static final int HEIGHT = 720;
+    private static final int WIDTH = 1080;
+    private static final int HEIGHT = 720;
 
-    public static final int RECTANGLE_SIZE_PX = 10;
+    private static final int RECTANGLE_SIZE_PX_DEFAULT = 8;
 
-    public static final int INITIAL_CELLS_COUNT = 5000;
+    private static final int CELLS_COUNT_HORIZONTAL = WIDTH / RECTANGLE_SIZE_PX_DEFAULT;
+    private static final int CELLS_COUNT_VERTICAL = HEIGHT / RECTANGLE_SIZE_PX_DEFAULT;
 
-    private static final int SLEEP_TIME_MS = 200;
+    private static final int RANDOM_PATTERN_CELL_COUNT_DEFAULT = 1000;
+
+    private static final int MOUSE_COORDINATE_CORRECTION_X = 8;
+    private static final int MOUSE_COORDINATE_CORRECTION_Y = 68;
+
+    private static final int SLEEP_TIME_DEFAULT_MS = 100;
+
+    private int sleepTime = SLEEP_TIME_DEFAULT_MS;
 
     private final JFrame frame;
+    private final JTextField fieldSleepTime;
+    private final JTextField fieldCellCount;
 
-    private boolean running = false;
+    private GridPanel panel;
+
+    private boolean mouseMode = false;
+
+    private boolean simulating = false;
+    private boolean singleStep = false;
 
     private boolean[][] cells;
-    private boolean[][] cellsCopy;
 
     public GameOfLife() {
-        int width = (WIDTH / RECTANGLE_SIZE_PX);
-        int height = (HEIGHT / RECTANGLE_SIZE_PX);
+        cells = new boolean[CELLS_COUNT_HORIZONTAL][CELLS_COUNT_VERTICAL];
 
-        cells = new boolean[width][height];
+        MouseListener listener = new MouseListener() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+
+            }
+
+            @Override
+            public void mousePressed(MouseEvent e) {
+
+                if (!isSimulating()) {
+
+                    int cellX = (((e.getX() - MOUSE_COORDINATE_CORRECTION_X) / RECTANGLE_SIZE_PX_DEFAULT));
+                    int cellY = (((e.getY() - MOUSE_COORDINATE_CORRECTION_Y) / RECTANGLE_SIZE_PX_DEFAULT));
+
+                    if ((cellX >= 0 && cellX < CELLS_COUNT_HORIZONTAL) && (cellY >= 0 && cellY < CELLS_COUNT_VERTICAL)) {
+                        mouseMode = cells[cellX][cellY];
+                        cells[cellX][cellY] = !cells[cellX][cellY];
+                    }
+                }
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+
+            }
+
+            @Override
+            public void mouseEntered(MouseEvent e) {
+
+            }
+
+            @Override
+            public void mouseExited(MouseEvent e) {
+
+            }
+        };
+
+        MouseMotionListener motionListener = new MouseMotionListener() {
+            @Override
+            public void mouseDragged(MouseEvent e) {
+                if (!isSimulating()) {
+                    int cellX = (((e.getX() - MOUSE_COORDINATE_CORRECTION_X) / RECTANGLE_SIZE_PX_DEFAULT));
+                    int cellY = (((e.getY() - MOUSE_COORDINATE_CORRECTION_Y) / RECTANGLE_SIZE_PX_DEFAULT));
+
+                    if ((cellX >= 0 && cellX < CELLS_COUNT_HORIZONTAL) && (cellY >= 0 && cellY < CELLS_COUNT_VERTICAL) && cells[cellX][cellY] == mouseMode) {
+                        cells[cellX][cellY] = !cells[cellX][cellY];
+                    }
+                }
+            }
+
+            @Override
+            public void mouseMoved(MouseEvent e) {
+
+            }
+        };
 
         frame = new JFrame("Conway's Game of Life");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setResizable(false);
-        frame.add(new GridPanel(cells, RECTANGLE_SIZE_PX));
+        frame.addMouseListener(listener);
+        frame.addMouseMotionListener(motionListener);
+        frame.setLayout(new BorderLayout());
+
+        // Menu bar
+        JPanel panelMenu = new JPanel();
+        panelMenu.setLayout(new FlowLayout());
+
+        // Start button
+        JButton buttonStart = new JButton("Start");
+        buttonStart.addActionListener((ActionEvent e) -> start());
+        buttonStart.setFocusable(false);
+        buttonStart.setContentAreaFilled(false);
+        panelMenu.add(buttonStart);
+
+        // Stop button
+        JButton buttonStop = new JButton("Stop");
+        buttonStop.addActionListener((ActionEvent e) -> stop());
+        buttonStop.setFocusable(false);
+        buttonStop.setContentAreaFilled(false);
+        panelMenu.add(buttonStop);
+
+        // Single step button
+        JButton buttonSingleStep = new JButton(">");
+        buttonSingleStep.addActionListener((ActionEvent e) -> singleStep = true);
+        buttonSingleStep.setFocusable(false);
+        buttonSingleStep.setContentAreaFilled(false);
+        panelMenu.add(buttonSingleStep);
+
+        // Clear button
+        JButton buttonClear = new JButton("Clear");
+        buttonClear.addActionListener((ActionEvent e) -> clear());
+        buttonClear.setFocusable(false);
+        buttonClear.setContentAreaFilled(false);
+        panelMenu.add(buttonClear);
+
+        // Sleep time label
+        JLabel labelSleepTime = new JLabel("Speed: ");
+        panelMenu.add(labelSleepTime);
+
+        // Sleep time input field
+        fieldSleepTime = new JTextField(Integer.toString(SLEEP_TIME_DEFAULT_MS), 5);
+        panelMenu.add(fieldSleepTime);
+
+        // Set speed button
+        JButton buttonSpeed = new JButton("Set speed");
+        buttonSpeed.addActionListener((ActionEvent e) -> setSpeed());
+        buttonSpeed.setFocusable(false);
+        buttonSpeed.setContentAreaFilled(false);
+        panelMenu.add(buttonSpeed);
+
+        // Producer pattern item
+        JButton buttonSpaceGun = new JButton("Space gun");
+        buttonSpaceGun.addActionListener((ActionEvent e) -> cellsSpaceGun());
+        buttonSpaceGun.setFocusable(false);
+        buttonSpaceGun.setContentAreaFilled(false);
+        panelMenu.add(buttonSpaceGun);
+
+        // Random pattern item
+        JButton buttonRandom = new JButton(("Random"));
+        buttonRandom.addActionListener((ActionEvent e) -> cellsRandom());
+        buttonRandom.setFocusable(false);
+        buttonRandom.setContentAreaFilled(false);
+        panelMenu.add(buttonRandom);
+        
+        // Random pattern cell count label
+        JLabel labelCellCount = new JLabel("Random sample size:");
+        labelCellCount.setOpaque(false);
+        panelMenu.add(labelCellCount);
+
+        // Random pattern cell count input field
+        fieldCellCount = new JTextField(Integer.toString(RANDOM_PATTERN_CELL_COUNT_DEFAULT), 5);
+        labelCellCount.setOpaque(false);
+        panelMenu.add(fieldCellCount);
+
+        frame.add(panelMenu, BorderLayout.NORTH);
+
+        panel = new GridPanel(cells, WIDTH, HEIGHT, RECTANGLE_SIZE_PX_DEFAULT);
+        frame.add(panel, BorderLayout.CENTER);
         frame.pack();
         frame.setLocationRelativeTo(null);
         frame.setVisible(true);
-
-        running = true;
     }
 
     @Override
     public void run() {
 
-        //initializeCells();
-        setPattern();
+        while(isRunning()) {
 
-        int cellsWidth = (WIDTH / RECTANGLE_SIZE_PX);
-        int cellsHeight = (HEIGHT / RECTANGLE_SIZE_PX);
+            if(isSimulating() || isSingleStep()) {
+                boolean[][] cellsCopy = new boolean[CELLS_COUNT_HORIZONTAL][CELLS_COUNT_VERTICAL];
 
-        int gen = 0;
-
-        while(running) {
-
-            cellsCopy = new boolean[cellsWidth][cellsHeight];
-
-            for(int x = 0; x < cellsWidth; x++) {
-                for(int y  = 0; y < cellsHeight; y++) {
-                   applyRules(cellsCopy, x, y);
+                for(int x = 0; x < CELLS_COUNT_HORIZONTAL; x++) {
+                    for(int y  = 0; y < CELLS_COUNT_VERTICAL; y++) {
+                        applyRules(cellsCopy, x, y);
+                    }
                 }
+
+                cells = cellsCopy;
+                singleStep = false;
             }
 
-            cells = cellsCopy;
-            gen++;
-
-            frame.getContentPane().removeAll();
-            frame.add(new GridPanel(cells, RECTANGLE_SIZE_PX));
+            frame.getContentPane().remove(panel);
+            frame.add(panel = new GridPanel(cells, WIDTH, HEIGHT, RECTANGLE_SIZE_PX_DEFAULT));
             frame.revalidate();
 
-            System.out.println("Generation: " + gen);
-            System.out.println("Sleeping");
             try {
-                Thread.sleep(SLEEP_TIME_MS);
+                Thread.sleep(sleepTime);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
-            System.out.println("Awake");
         }
+    }
+
+    private void setSpeed() {
+        sleepTime = Integer.parseInt(fieldSleepTime.getText());
+    }
+
+    private void clear() {
+        cells = new boolean[CELLS_COUNT_HORIZONTAL][CELLS_COUNT_VERTICAL];
+        stop();
+    }
+
+    private void stop() {
+        simulating = false;
+    }
+
+    private void start() {
+        simulating = true;
     }
 
     private void applyRules(boolean[][] cellsCopy, int x, int y) {
@@ -113,19 +269,22 @@ public class GameOfLife implements Runnable {
         return neighbours;
     }
 
-    private void initializeCells() {
-        int width = (WIDTH / RECTANGLE_SIZE_PX);
-        int height = (HEIGHT / RECTANGLE_SIZE_PX);
+    private void cellsRandom() {
+        clear();
 
-        for(int i = 0; i < INITIAL_CELLS_COUNT; i++) {
-            int x = ThreadLocalRandom.current().nextInt(width);
-            int y = ThreadLocalRandom.current().nextInt(height);
+        int sampleSize = Integer.parseInt(fieldCellCount.getText());
+
+        for(int i = 0; i < sampleSize; i++) {
+            int x = ThreadLocalRandom.current().nextInt(CELLS_COUNT_HORIZONTAL);
+            int y = ThreadLocalRandom.current().nextInt(CELLS_COUNT_VERTICAL);
 
             cells[x][y] = true;
         }
     }
 
-    private void setPattern() {
+    private void cellsSpaceGun() {
+        clear();
+
         cells[15][11] = true;
         cells[15][12] = true;
         cells[16][11] = true;
@@ -177,8 +336,21 @@ public class GameOfLife implements Runnable {
         cells[50][10] = true;
     }
 
-    public boolean isCellAlive(int x, int y) {
+    private boolean isCellAlive(int x, int y) {
         return cells[x][y];
+    }
+
+    private boolean isRunning() {
+        boolean running = true;
+        return running;
+    }
+
+    private boolean isSimulating() {
+        return simulating;
+    }
+
+    private boolean isSingleStep() {
+        return singleStep;
     }
 
     public static void main(String[] args) {

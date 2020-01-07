@@ -3,18 +3,22 @@ import java.awt.*;
 
 public class GridPanel extends JPanel {
 
-    private final int rectangleSize;
-
     private final boolean[][] cells;
 
-    public GridPanel(boolean[][] cells, int rectangleSize) {
+    private final int width;
+    private final int height;
+    private final int rectangleSize;
+
+    public GridPanel(boolean[][] cells, int width, int height, int rectangleSize) {
         this.cells = cells;
+        this.width = width;
+        this.height = height;
         this.rectangleSize = rectangleSize;
     }
 
     @Override
     public Dimension getPreferredSize() {
-        return new Dimension(GameOfLife.WIDTH, GameOfLife.HEIGHT);
+        return new Dimension(width, height);
     }
 
     @Override
@@ -33,7 +37,6 @@ public class GridPanel extends JPanel {
                 }
             }
         }
-
         g2d.dispose();
     }
 }
